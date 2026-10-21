@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VLESS → JSON</title>
+<style>
+  :root {
+    --bg: #eef2f5; --surface: #ffffff; --ink: #14213d; --muted: #55637a; --line: #c9d3dc;
+    --accent: #3a4fd7; --accent-ink: #ffffff; --ok: #17784b; --warn: #9a5b00; --err: #b3261e;
+    --code-bg: #f6f8fa; color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1624; --surface: #172033; --ink: #e8edf6; --muted: #9aa8c2; --line: #2c3a57;
+      --accent: #7b8cff; --accent-ink: #0f1624; --ok: #5ed6a0; --warn: #f0b255; --err: #ff8a80;
+      --code-bg: #0f1624; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Bengali", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.6rem; line-height: 1.2; margin: 8px 0 6px; letter-spacing: -0.01em; }
+  .ver { margin: 0 0 6px; color: var(--muted); font-size: 0.9rem; }
+  .lead { margin: 0 0 18px; color: var(--muted); }
+  textarea { width: 100%; min-height: 150px; padding: 12px; border: 1.5px solid var(--line); border-radius: 6px;
+    background: var(--surface); color: var(--ink); font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+  textarea:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; gap: 10px; margin: 12px 0 4px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; padding: 11px 16px; border-radius: 6px; border: 1.5px solid var(--line);
+    background: var(--surface); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: 1 1 auto; }
+  button.small { padding: 8px 12px; font-size: 0.9rem; }
+  input[type=text] { flex: 1 1 180px; min-width: 0; padding: 9px 10px; font: 14px ui-monospace, Menlo, Consolas, monospace;
+    border: 1.5px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .opt { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; font-size: 0.92rem; color: var(--muted); }
+  .opt input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+  #results { margin-top: 22px; }
+  .item { border-top: 2px solid var(--ink); padding: 14px 0 18px; }
+  .item h2 { font-size: 1.05rem; margin: 0 0 2px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin: 0 0 8px; overflow-wrap: anywhere; }
+  .status { font-weight: 700; margin: 0 0 4px; }
+  .status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.err { color: var(--err); }
+  .did { margin: 0 0 8px; padding-left: 18px; color: var(--muted); font-size: 0.9rem; }
+  .did li { margin: 2px 0; }
+  .did li.warn { color: var(--warn); } .did li.err { color: var(--err); font-weight: 600; }
+  .item.bad { border-top-color: var(--err); }
+  .err-line { color: var(--err); font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+  pre { margin: 6px 0 0; padding: 12px; max-height: 320px; overflow: auto; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 6px; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .note { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  .note p { margin: 0 0 8px; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 9px 16px; border-radius: 6px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .15s; }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>VLESS লিংক → JSON কনফিগ</h1>
+  <p class="ver">সংস্করণ ৫</p>
+  <p class="lead">যেকোনো <code>vless://</code> লিংক পেস্ট করুন। একসাথে অনেকগুলোও দেওয়া যায়, এমনকি সাবস্ক্রিপশন (base64) টেক্সটও। টুল অ্যাপের নিয়ম অনুযায়ী নিজে ঠিক করে নেয়, আর শেষে যাচাই করে জানায় JSON চলবে কি না।</p>
+
+  <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
+    placeholder="vless://uuid@host:port?type=ws&amp;security=tls&amp;sni=...#নাম"></textarea>
+  <div class="row">
+    <button class="primary" id="convert">JSON বানান</button>
+    <button id="paste">পেস্ট</button>
+    <button id="clear">মুছুন</button>
+  </div>
+  <label class="opt"><input type="checkbox" id="verify" checked>
+    <span>TLS লিংকে SNI আলাদা হলে সার্টিফিকেট সার্ভারের ডোমেইন নামে যাচাই হোক (ফ্রন্টিং লিংকের জন্য দরকার)</span></label>
+
+  <section id="results" aria-live="polite"></section>
+
+  <div class="note">
+    <p>ডোমেইনের IP Cloudflare DNS বা Google DNS থেকে আনা হয়। না পেলে নিজের IP লিখে দিতে পারবেন।</p>
+    <p>TLS ছাড়া VLESS ট্রাফিক এনক্রিপ্ট করে না। ফোন থেকে সার্ভার পর্যন্ত পথে অন্য কেউ ট্রাফিক দেখতে পারে।</p>
+  </div>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+/* ---------- converter ---------- */
+function isIPv4(h) { return /^\d{1,3}(\.\d{1,3}){3}$/.test(h); }
+function isIPv6(h) { return h.indexOf(':') !== -1; }
+function isDomain(h) { return !!h && h.indexOf('.') !== -1 && !isIPv4(h) && !isIPv6(h); }
+function isPrivateIPv4(h) {
+  var p = h.split('.').map(Number);
+  return p[0] === 10 || p[0] === 127 || (p[0] === 192 && p[1] === 168) ||
+         (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 169 && p[1] === 254);
+}
+function isPrivateIPv6(h) {
+  var x = h.toLowerCase();
+  return x === '::1' || x.indexOf('fc') === 0 || x.indexOf('fd') === 0 || x.indexOf('fe80') === 0;
+}
+function isPrivateIP(h) { return isIPv4(h) ? isPrivateIPv4(h) : (isIPv6(h) ? isPrivateIPv6(h) : false); }
+function isPublicIP(h) {
+  if (isIPv4(h)) return !isPrivateIPv4(h);
+  if (isIPv6(h)) return !isPrivateIPv6(h);
+  return false;
+}
+function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+
+function convert(link, ipOverride, verifyByName) {
+  var u;
+  try { u = new URL(link.trim()); } catch (e) { throw new Error('লিংকটা পড়া যায়নি'); }
+  if (u.protocol !== 'vless:') throw new Error('এটা vless:// লিংক নয়');
+
+  var id = safeDecode(u.username);
+  var address = u.hostname.replace(/^\[|\]$/g, '');
+  var port = parseInt(u.port, 10) || 443;
+  if (!id || !address) throw new Error('UUID বা সার্ভার address নেই');
+
+  var q = u.searchParams;
+  var name = u.hash ? safeDecode(u.hash.slice(1)) : address;
+  var type = (q.get('type') || 'tcp').toLowerCase();
+  var security = (q.get('security') || 'none').toLowerCase();
+  if (security === 'xtls') security = 'tls';
+  if (security === '') security = 'none';
+  var host = q.get('host') || '';
+  var path = q.get('path') || '/';
+  var did = [];
+
+  /* redirect trick decision (needs to be known before the transport is built) */
+  var target0 = ipOverride || address;
+  var needsIP = security === 'none' && !isIPv4(address) && !isIPv6(address) && !ipOverride;
+  var redirected = security === 'none' && (isPublicIP(target0) || needsIP);
+  var hh = host || (redirected ? address : '');
+  if (redirected && !host && type !== 'grpc' && type !== 'tcp') did.push('Host হেডার আসল সার্ভারের নামে রাখা হয়েছে (নইলে 10.0.0.1 চলে যেত)');
+
+  var user = { encryption: q.get('encryption') || 'none', id: id, level: 8 };
+  if (q.get('flow')) user.flow = q.get('flow');
+
+  var stream = { network: type };
+  if (type === 'splithttp') stream.network = 'xhttp';
+
+  if (type === 'ws') {
+    stream.wsSettings = { path: path };
+    if (hh) stream.wsSettings.headers = { Host: hh };
+  } else if (type === 'grpc') {
+    stream.grpcSettings = { serviceName: q.get('serviceName') || '', multiMode: q.get('mode') === 'multi' };
+    if (q.get('authority')) stream.grpcSettings.authority = q.get('authority');
+  } else if (type === 'httpupgrade') {
+    stream.httpupgradeSettings = { path: path };
+    if (hh) stream.httpupgradeSettings.host = hh;
+  } else if (type === 'xhttp' || type === 'splithttp') {
+    stream.xhttpSettings = { path: path };
+    if (hh) stream.xhttpSettings.host = hh;
+    if (q.get('mode')) stream.xhttpSettings.mode = q.get('mode');
+  } else if (type === 'h2' || type === 'http') {
+    stream.network = 'h2';
+    stream.httpSettings = { path: path };
+    if (hh) stream.httpSettings.host = hh.split(',');
+  } else if (type === 'kcp') {
+    stream.network = 'kcp';
+    stream.kcpSettings = { header: { type: q.get('headerType') || 'none' } };
+    if (q.get('seed')) stream.kcpSettings.seed = q.get('seed');
+  } else if (type === 'tcp' && q.get('headerType') === 'http') {
+    var req = { path: path.split(',') };
+    if (hh) req.headers = { Host: hh.split(',') };
+    stream.tcpSettings = { header: { type: 'http', request: req } };
+  }
+
+  var certByName = '';
+  if (security === 'tls') {
+    stream.security = 'tls';
+    stream.tlsSettings = { serverName: q.get('sni') || host || address };
+    if (q.get('fp')) stream.tlsSettings.fingerprint = q.get('fp');
+    if (q.get('alpn')) stream.tlsSettings.alpn = q.get('alpn').split(',');
+    var insecure = /^(1|true)$/i.test(q.get('allowInsecure') || q.get('insecure') || '');
+    if (verifyByName !== false || insecure) {
+      var cn = isDomain(address) ? address : (isDomain(host) ? host : '');
+      if (cn && cn !== stream.tlsSettings.serverName) {
+        stream.tlsSettings.verifyPeerCertByName = cn;
+        certByName = cn;
+        did.push('সার্টিফিকেট যাচাই হবে ' + cn + ' নামে (SNI: ' + stream.tlsSettings.serverName + ')');
+      }
+    }
+    if (insecure) did.push('allowInsecure বাদ দেওয়া হয়েছে (নতুন core এটা মানে না)');
+  } else if (security === 'reality') {
+    stream.security = 'reality';
+    stream.realitySettings = {
+      serverName: q.get('sni') || '', fingerprint: q.get('fp') || 'chrome',
+      publicKey: q.get('pbk') || '', shortId: q.get('sid') || '', spiderX: q.get('spx') || ''
+    };
+  }
+
+  var outAddress = address, outbounds = [];
+  if (redirected) {
+    outAddress = '10.0.0.1';
+    stream.sockopt = { dialerProxy: 'redir' };
+    did.push('VLESS address 10.0.0.1 করা হয়েছে, আসল সার্ভারে redir outbound পাঠায়');
+  }
+
+  outbounds.push({
+    mux: { concurrency: -1, enabled: false }, protocol: 'vless',
+    settings: { vnext: [{ address: outAddress, port: port, users: [user] }] },
+    streamSettings: stream, tag: 'proxy'
+  });
+  if (redirected) {
+    var target = (isIPv6(target0) ? '[' + target0 + ']' : target0) + ':' + port;
+    var redirSettings = { redirect: target };
+    if (needsIP) redirSettings.domainStrategy = 'UseIP';
+    outbounds.push({ protocol: 'freedom', settings: redirSettings, tag: 'redir' });
+  }
+  outbounds.push({ protocol: 'freedom', settings: { domainStrategy: 'UseIP' }, tag: 'direct' });
+  outbounds.push({ protocol: 'blackhole', settings: { response: { type: 'http' } }, tag: 'block' });
+
+  var dnsServers = ['8.8.8.8'], dnsRules = [];
+  if (needsIP) {
+    dnsServers = [{ address: '8.8.8.8', domains: ['full:' + address], tag: 'domestic-dns' }, '8.8.8.8'];
+    dnsRules.push({ inboundTag: ['domestic-dns'], outboundTag: 'direct', type: 'field' });
+  }
+
+  var config = {
+    dns: { servers: dnsServers, tag: 'dns-module' },
+    inbounds: [{
+      listen: '127.0.0.1', port: 10808, protocol: 'socks',
+      settings: { auth: 'noauth', udp: true, userLevel: 8 },
+      sniffing: { destOverride: [], enabled: false, routeOnly: false }, tag: 'socks'
+    }],
+    log: { loglevel: 'warning' },
+    outbounds: outbounds,
+    remarks: '',
+    routing: {
+      domainStrategy: 'AsIs',
+      rules: [
+        { network: 'udp', outboundTag: 'block', port: '443', type: 'field' },
+        { ip: ['geoip:private'], outboundTag: 'direct', type: 'field' },
+        { domain: ['geosite:private'], outboundTag: 'direct', type: 'field' }
+      ].concat(dnsRules).concat([
+        { inboundTag: ['dns-module'], outboundTag: 'proxy', type: 'field' },
+        { outboundTag: 'proxy', port: '0-65535', type: 'field' }
+      ])
+    }
+  };
+
+  return {
+    name: name, address: address, port: port, network: stream.network, security: security,
+    redirected: redirected, needsIP: needsIP, certByName: certByName, did: did,
+    issues: check(config), json: JSON.stringify(config, null, 2)
+  };
+}
+
+/* checks the finished config against the rules that made the app fail before */
+function check(c) {
+  var out = [], ob = c.outbounds[0], v = ob.settings.vnext[0], u = v.users[0], st = ob.streamSettings;
+  var sec = st.security || 'none';
+  if (sec === 'none' && !(isDomain(v.address) || (isIPv4(v.address) && isPrivateIPv4(v.address)))) {
+    out.push({ lvl: 'err', msg: 'TLS ছাড়া VLESS-এর address পাবলিক IP, core চালু হবে না' });
+  }
+  if (sec === 'none' && isDomain(v.address)) {
+    out.push({ lvl: 'warn', msg: 'TLS ছাড়া ডোমেইন address, আগে এতেও error এসেছিল' });
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.id)) {
+    out.push({ lvl: 'warn', msg: 'UUID-র ফরম্যাট সাধারণ UUID-র মতো নয়' });
+  }
+  if (!(v.port >= 1 && v.port <= 65535)) out.push({ lvl: 'err', msg: 'পোর্ট ঠিক নয়' });
+  if (sec === 'tls' && isDomain(v.address) && st.tlsSettings.serverName &&
+      st.tlsSettings.serverName !== v.address && !st.tlsSettings.verifyPeerCertByName) {
+    out.push({ lvl: 'warn', msg: 'SNI সার্ভারের ডোমেইন থেকে আলাদা, সার্টিফিকেট না মিলতে পারে (চেকবক্সে টিক দিন)' });
+  }
+  if (sec === 'reality' && (!st.realitySettings.publicKey)) out.push({ lvl: 'err', msg: 'REALITY-র publicKey (pbk) নেই' });
+  if (st.sockopt && st.sockopt.dialerProxy) {
+    var has = c.outbounds.some(function (o) { return o.tag === st.sockopt.dialerProxy; });
+    if (!has) out.push({ lvl: 'err', msg: 'dialerProxy-র outbound পাওয়া যায়নি' });
+  }
+  return out;
+}
+
+/* pulls vless links out of messy pasted text; falls back to base64 subscriptions */
+function extractLinks(text) {
+  function scan(t) {
+    var res = [];
+    t.split(/\r?\n/).forEach(function (l) {
+      l = l.trim(); if (!l) return;
+      var i = l.indexOf('vless://');
+      if (i >= 0) {
+        l.slice(i).split(/\s+(?=vless:\/\/)/).forEach(function (x) { res.push(x.trim()); });
+      } else { res.push(l); }
+    });
+    return res;
+  }
+  var found = scan(text);
+  if (!/vless:\/\//.test(text)) {
+    var compact = text.replace(/\s+/g, '');
+    if (/^[A-Za-z0-9+\/_-]+=*$/.test(compact) && compact.length > 16) {
+      try {
+        var b = atob(compact.replace(/-/g, '+').replace(/_/g, '/'));
+        var dec = decodeURIComponent(escape(b));
+        if (/vless:\/\//.test(dec)) found = scan(dec);
+      } catch (e) { /* not base64 */ }
+    }
+  }
+  var onlyVless = found.filter(function (x) { return x.indexOf('vless://') === 0; });
+  return onlyVless.length ? onlyVless : found;
+}
+/* ---------- end converter ---------- */
+
+/* ---------- UI ---------- */
+function $(id) { return document.getElementById(id); }
+function toast(msg) {
+  var t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(function () { t.classList.remove('show'); }, 1500);
+}
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(function () { toast('কপি হয়েছে'); }, function () { fallbackCopy(text); });
+  }
+  fallbackCopy(text);
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast('কপি হয়েছে'); } catch (e) { toast('কপি হয়নি, হাতে সিলেক্ট করুন'); }
+  document.body.removeChild(ta);
+}
+function download(name, text) {
+  var slug = name.replace(/[^\w\u0980-\u09FF.-]+/g, '_').replace(/^_+|_+$/g, '') || 'config';
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = slug + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+}
+function verifyOn() { var c = $('verify'); return c ? c.checked : true; }
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function fetchJSON(url) {
+  var ctl = new AbortController();
+  var timer = setTimeout(function () { ctl.abort(); }, 5000);
+  return fetch(url, { headers: { accept: 'application/dns-json' }, signal: ctl.signal })
+    .then(function (r) { clearTimeout(timer); return r.json(); });
+}
+function resolveA(name) {
+  var urls = [
+    'https://cloudflare-dns.com/dns-query?type=A&name=' + encodeURIComponent(name),
+    'https://dns.google/resolve?type=A&name=' + encodeURIComponent(name)
+  ];
+  return urls.reduce(function (chain, url) {
+    return chain.then(function (found) {
+      if (found) return found;
+      return fetchJSON(url).then(function (d) {
+        var a = (d.Answer || []).filter(function (x) { return x.type === 1 && isPublicIP(x.data); })[0];
+        return a ? a.data : '';
+      }, function () { return ''; });
+    });
+  }, Promise.resolve(''));
+}
+
+function showResult(item, r, line, i, resolved) {
+  item.textContent = '';
+  item.className = 'item';
+  item.appendChild(el('h2', '', r.name));
+  item.appendChild(el('p', 'meta', r.address + ':' + r.port + '  ·  ' + r.network + '  ·  ' + r.security));
+
+  var hasErr = r.issues.some(function (x) { return x.lvl === 'err'; });
+  var hasWarn = r.issues.length > 0;
+  var stCls = hasErr ? 'status err' : (hasWarn || r.needsIP ? 'status warn' : 'status ok');
+  var stMsg = hasErr ? 'এই JSON অ্যাপে চলবে না' : (hasWarn || r.needsIP ? 'চলতে পারে, তবে নিচের সতর্কতা দেখুন' : 'অ্যাপের নিয়ম অনুযায়ী ঠিক আছে');
+  item.appendChild(el('p', stCls, stMsg));
+
+  var ul = el('ul', 'did');
+  if (resolved) ul.appendChild(el('li', '', 'ডোমেইনের IP পাওয়া গেছে: ' + resolved));
+  if (r.needsIP) ul.appendChild(el('li', 'warn', 'ডোমেইনের IP পাওয়া যায়নি, রিডাইরেক্টের লক্ষ্য হিসেবে ডোমেইন বসেছে (কম নিশ্চিত)। IP জানা থাকলে নিচে লিখুন।'));
+  r.did.forEach(function (d) { ul.appendChild(el('li', '', d)); });
+  r.issues.forEach(function (x) { ul.appendChild(el('li', x.lvl, x.msg)); });
+  if (ul.children.length) item.appendChild(ul);
+
+  if (r.needsIP) {
+    var ipRow = el('div', 'row');
+    var inp = document.createElement('input');
+    inp.type = 'text'; inp.inputMode = 'decimal'; inp.placeholder = 'সার্ভারের IP, যেমন 157.85.110.18';
+    inp.setAttribute('aria-label', 'সার্ভারের IP');
+    var go = el('button', 'small', 'এই IP দিয়ে বানান');
+    go.onclick = function () {
+      var v = inp.value.trim();
+      if (!isPublicIP(v)) { toast('সঠিক পাবলিক IP লিখুন'); return; }
+      fill(item, line, i, v);
+    };
+    ipRow.appendChild(inp); ipRow.appendChild(go);
+    item.appendChild(ipRow);
+  }
+
+  var row = el('div', 'row');
+  var c = el('button', 'primary small', 'JSON কপি');
+  c.onclick = function () { copyText(r.json); };
+  var d = el('button', 'small', 'ফাইল নামান');
+  d.onclick = function () { download(r.name, r.json); };
+  row.appendChild(c); row.appendChild(d);
+  item.appendChild(row);
+
+  var det = el('details'); det.appendChild(el('summary', '', 'JSON দেখুন'));
+  det.appendChild(el('pre', '', r.json));
+  item.appendChild(det);
+}
+
+function fill(item, line, i, ip) {
+  var r;
+  try { r = convert(line, ip, verifyOn()); } catch (e) {
+    item.textContent = ''; item.className = 'item bad';
+    item.appendChild(el('p', 'err-line', 'লাইন ' + (i + 1) + ': ' + e.message));
+    return Promise.resolve();
+  }
+  if (!r.needsIP) { showResult(item, r, line, i, ''); return Promise.resolve(); }
+  item.textContent = '';
+  item.appendChild(el('h2', '', r.name));
+  item.appendChild(el('p', 'meta', r.address + ' এর IP খোঁজা হচ্ছে…'));
+  return resolveA(r.address).then(function (found) {
+    if (found) showResult(item, convert(line, found, verifyOn()), line, i, found);
+    else showResult(item, r, line, i, '');
+  });
+}
+
+function render() {
+  var lines = extractLinks($('input').value);
+  var box = $('results');
+  box.textContent = '';
+  if (!lines.length) { box.appendChild(el('p', 'err-line', 'আগে অন্তত একটা vless:// লিংক পেস্ট করুন।')); return; }
+  lines.forEach(function (line, i) {
+    var item = el('div', 'item');
+    box.appendChild(item);
+    fill(item, line, i, '');
+  });
+}
+
+if (typeof document !== 'undefined') {
+  $('convert').onclick = render;
+  $('clear').onclick = function () { $('input').value = ''; $('results').textContent = ''; $('input').focus(); };
+  $('paste').onclick = function () {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) { $('input').value = t; render(); },
+        function () { toast('পেস্ট অনুমতি নেই, বক্সে লং-প্রেস করে পেস্ট করুন'); });
+    } else { toast('বক্সে লং-প্রেস করে পেস্ট করুন'); }
+  };
+}
+</script>
+</body>
+</html>
